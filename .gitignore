@@ -1,5 +1,8 @@
+# Work management
+plan.txt
+
 # API key
-alpha_vantage_key.txt
+api_key.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
