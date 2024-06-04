@@ -1,5 +1,10 @@
+# Data files
+data/
+*.json
+
 # Work management
 plan.txt
+TODO.txt
 
 # API key
 api_key.txt
