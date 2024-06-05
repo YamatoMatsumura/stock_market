@@ -26,6 +26,8 @@ class StockDataContainer:
         print("Updating all data...")
         self.updateOHLCData()
         self.updateSentimentData()
+
+        # Write all data to new_data file
         self.data.to_csv('data/new_data.csv', index=False)
 
     def updateOHLCData(self):
@@ -41,20 +43,19 @@ class StockDataContainer:
         # Format data into pandas df
         df = self._parseOHLC(rawData)
 
+        # Check if only need portion of OHLC data
+        if self.lastUpdated is not None:
+            df = df[df['Date'] > self.lastUpdated]
+
         # Check if no data is currently stored
         if self.data is None:
             self.data = df
         else:
-            # Check if adding new data for new days
-            if self.lastUpdated != dt.datetime.today().strftime('%Y-%m-%d'):
-                self.data = pd.concat([self.data, df])
+            # Fill in OHLC data
+            self.data = pd.merge(self.data, df, on='Date')
 
-            # Check if filling in data for days already existing in data
-            else:
-                self.data = pd.merge(self.data, df, on='Date')
-        
-        # Change last updated to today
-        self.lastUpdated = dt.datetime.today().strftime('%Y-%m-%d')
+        # Output all contents in self.data to csv
+        self.data.to_csv('data/new_data.csv', index=False)
      
     def updateSentimentData(self):
         # Initialize empty dataframe
@@ -62,9 +63,15 @@ class StockDataContainer:
         df = pd.DataFrame(columns=columns)
 
         # Initialize day delta to adjust time frame to search for
-        dayDelta = 365*2 + 80
+        dayDelta = 0
 
         while True:
+            #---------------------------------------
+            # Debug line, delete later
+            if dayDelta == 20:
+                break
+            #--------------------------------------
+
             # Initialize time frame to 24 hours
             day = dt.datetime.now() - dt.timedelta(days=dayDelta)
             timeTo = day.strftime('%Y%m%d') + 'T2359'
@@ -79,18 +86,23 @@ class StockDataContainer:
             r = requests.get(url)
             rawData = r.json()
 
+            # with open('Sentiment-AMZN.json', 'w') as file:
+            #     json.dump(rawData, file)
+
             # Check for max api call error
             if self._checkMaxAPICall(rawData):
                 rawData = self._fixMaxAPICallFail(rawData, url)
             
             # Check for end of sentiment data
             if self._checkSentimentError(rawData):
-                print("No more sentiment data. Retrived: " + timeFrom + '-' + timeTo)
                 # Break out of loop since no more sentiment data available
                 break
 
             # Format data into pandas df
             newRow = self._parseSentiment(rawData)
+            # Handle case when no articles found for that day
+            if newRow is None:
+                newRow = [(dt.datetime.now() - dt.timedelta(days=dayDelta)).strftime('%Y-%m-%d'), 0, 0]
             df.loc[len(df)] = newRow
 
             # Adjust time frame back one day
@@ -99,20 +111,18 @@ class StockDataContainer:
             # Check if only need up to a certain day
             if self.lastUpdated == (dt.datetime.now() - dt.timedelta(days=dayDelta)).strftime('%Y-%m-%d'):
                 break
-        
+
+        # Delete rows with missing data
+        df = df[df['Number of Articles'] != 0]
+
         # Check if no data is currently stored
         if self.data is None:
             self.data = df
         else:
-            # Check if adding new data for new days
-            if self.lastUpdated != dt.datetime.today().strftime('%Y-%m-%d'):
-                self.data = pd.concat([self.data, df])
+            # Fill in sentiment data
+            self.data = pd.merge(self.data, df, on='Date')
 
-            # Check if filling in data for days already existing in data
-            else:
-                self.data = pd.merge(self.data, df, on='Date')
-
-
+        # Output all contents in self.data to csv
         self.data.to_csv('data/new_data.csv', index=False)
 
     def _parseOHLC(self, rawData):
