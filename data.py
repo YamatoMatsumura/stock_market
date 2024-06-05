@@ -1,7 +1,6 @@
 import requests
-import numpy as np
+import os
 import pandas as pd
-import json
 import datetime as dt
 
 class StockDataContainer:
@@ -27,8 +26,8 @@ class StockDataContainer:
         self.updateOHLCData()
         self.updateSentimentData()
 
-        # Write all data to new_data file
-        self.data.to_csv('data/new_data.csv', index=False)
+        # Save data
+        self._saveData()
 
     def updateOHLCData(self):
         # Request for all OHLC data
@@ -54,8 +53,8 @@ class StockDataContainer:
             # Fill in OHLC data
             self.data = pd.merge(self.data, df, on='Date')
 
-        # Output all contents in self.data to csv
-        self.data.to_csv('data/new_data.csv', index=False)
+        # Save data
+        self._saveData()
      
     def updateSentimentData(self):
         # Initialize empty dataframe
@@ -122,8 +121,8 @@ class StockDataContainer:
             # Fill in sentiment data
             self.data = pd.merge(self.data, df, on='Date')
 
-        # Output all contents in self.data to csv
-        self.data.to_csv('data/new_data.csv', index=False)
+        # Save data
+        self._saveData()        
 
     def _parseOHLC(self, rawData):
         parsedData = [] # Holds date, OHLC, and volume data in a 2d list
@@ -195,3 +194,9 @@ class StockDataContainer:
                     return True
         else:
             return False
+    
+    def _saveData(self):
+        if not os.path.isdir('data/' + self.ticker):
+            os.makedirs('data/' + self.ticker)
+        # Output all contents in self.data to csv
+        self.data.to_csv('data/' + self.ticker + '/new_data.csv', index=False)
