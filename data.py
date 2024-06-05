@@ -9,14 +9,24 @@ class StockDataContainer:
         self.ticker = ticker
         self.apiKey = self._getApiKey()
         self.data = None
+        self.lastUpdated = self._getLastUpdated()
 
     def _getApiKey(self):
         with open('api_key.txt') as file:
             return file.read()
     
+    def _getLastUpdated(self):
+        try:
+            df = pd.read_csv('data/trained_data.csv')
+            return df['Date'].iloc[0]
+        except pd.errors.EmptyDataError:
+            return None
+    
     def updateAllData(self):
+        print("Updating all data...")
         self.updateOHLCData()
         self.updateSentimentData()
+        self.data.to_csv('data/new_data.csv', index=False)
 
     def updateOHLCData(self):
         # Request for all OHLC data
@@ -28,72 +38,82 @@ class StockDataContainer:
         if self._checkMaxAPICall(rawData):
             rawData = self._fixMaxAPICallFail(rawData, url)
 
-        # #-------------------------------------------------
-        # # Debug line, delete later
-        # with open ('OHLC-AMZN.json', 'w') as file:
-        #     json.dump(rawData, file)
-        # #---------------------------------------------------
         # Format data into pandas df
-        formattedData = self._parseOHLC(rawData)
+        df = self._parseOHLC(rawData)
 
+        # Check if no data is currently stored
         if self.data is None:
-            self.data = formattedData
+            self.data = df
         else:
-            self.data = pd.merge(self.data, formattedData, on='Date')
+            # Check if adding new data for new days
+            if self.lastUpdated != dt.datetime.today().strftime('%Y-%m-%d'):
+                self.data = pd.concat([self.data, df])
 
-            
+            # Check if filling in data for days already existing in data
+            else:
+                self.data = pd.merge(self.data, df, on='Date')
+        
+        # Change last updated to today
+        self.lastUpdated = dt.datetime.today().strftime('%Y-%m-%d')
+     
     def updateSentimentData(self):
-        today = dt.datetime.now()
-        if 'Sentiment' in self.data.columns.tolist():
-            # Find most recent Sentiment and fill in up from there
-            pass
-        else:
-            # Keep getting sentiment data until none found
+        # Initialize empty dataframe
+        columns = ['Date', 'Sentiment (Avg)', 'Number of Articles']
+        df = pd.DataFrame(columns=columns)
 
-            #Initialize empty dataframe
-            columns = ['Date', 'Sentiment (Avg)', 'Number of Articles']
-            df = pd.DataFrame(columns=columns)
-            dayDelta = 365*2 + 80
+        # Initialize day delta to adjust time frame to search for
+        dayDelta = 365*2 + 80
 
-            while True:
-                # Initialize time frame to 24 hours
-                day = dt.datetime.now() - dt.timedelta(days=dayDelta)
-                timeTo = day.strftime('%Y%m%d') + 'T2359'
-                timeFrom = day.strftime('%Y%m%d') + 'T0000'
-                # Make API call
-                url = ('https://www.alphavantage.co/query?function=NEWS_SENTIMENT'
-                       '&tickers=' + self.ticker + 
-                       '&time_from=' + timeFrom + 
-                       '&time_to=' + timeTo + 
-                       '&apikey=' + self.apiKey)
-                r = requests.get(url)
-                rawData = r.json()
+        while True:
+            # Initialize time frame to 24 hours
+            day = dt.datetime.now() - dt.timedelta(days=dayDelta)
+            timeTo = day.strftime('%Y%m%d') + 'T2359'
+            timeFrom = day.strftime('%Y%m%d') + 'T0000'
 
-                # Check and fix max api call errors
-                if self._checkMaxAPICall(rawData):
-                    rawData = self._fixMaxAPICallFail(rawData, url)
-                
-                # Check for no more articles
-                if self._checkSentimentError(rawData):
-                    print("No more sentiment data")
-                    print("Ended on: " + timeFrom + '-' + timeTo)
-                    break
+            # Make API call
+            url = ('https://www.alphavantage.co/query?function=NEWS_SENTIMENT'
+                    '&tickers=' + self.ticker + 
+                    '&time_from=' + timeFrom + 
+                    '&time_to=' + timeTo + 
+                    '&apikey=' + self.apiKey)
+            r = requests.get(url)
+            rawData = r.json()
 
-                # #--------------------------------------------------------
-                # # Debug line, delete later
-                # with open ('Sentiment-AMZN.json', 'w') as file:
-                #     json.dump(rawData, file)
-                # #---------------------------------------------------------
-
-                # Format data into pandas df
-                newRow = self._parseSentiment(rawData)
-                df.loc[len(df)] = newRow
-
-                # Adjust time frame back one day
-                dayDelta += 1
+            # Check for max api call error
+            if self._checkMaxAPICall(rawData):
+                rawData = self._fixMaxAPICallFail(rawData, url)
             
-            # add new sentiment data into self.data
-            self.data = pd.merge(self.data, df, on='Date')
+            # Check for end of sentiment data
+            if self._checkSentimentError(rawData):
+                print("No more sentiment data. Retrived: " + timeFrom + '-' + timeTo)
+                # Break out of loop since no more sentiment data available
+                break
+
+            # Format data into pandas df
+            newRow = self._parseSentiment(rawData)
+            df.loc[len(df)] = newRow
+
+            # Adjust time frame back one day
+            dayDelta += 1
+
+            # Check if only need up to a certain day
+            if self.lastUpdated == (dt.datetime.now() - dt.timedelta(days=dayDelta)).strftime('%Y-%m-%d'):
+                break
+        
+        # Check if no data is currently stored
+        if self.data is None:
+            self.data = df
+        else:
+            # Check if adding new data for new days
+            if self.lastUpdated != dt.datetime.today().strftime('%Y-%m-%d'):
+                self.data = pd.concat([self.data, df])
+
+            # Check if filling in data for days already existing in data
+            else:
+                self.data = pd.merge(self.data, df, on='Date')
+
+
+        self.data.to_csv('data/new_data.csv', index=False)
 
     def _parseOHLC(self, rawData):
         parsedData = [] # Holds date, OHLC, and volume data in a 2d list
@@ -154,6 +174,7 @@ class StockDataContainer:
         while self._checkMaxAPICall(data):
             r = requests.get(url)
             data = r.json()
+        print("API call error resolved")
         return data
 
     def _checkSentimentError(self, data):
