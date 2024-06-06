@@ -1,7 +1,10 @@
 import requests
-import os
 import pandas as pd
 import datetime as dt
+
+import vpn_script
+
+RUN_SCRIPT = True
 
 class StockDataContainer:
     def __init__(self, ticker):
@@ -9,6 +12,7 @@ class StockDataContainer:
         self.apiKey = self._getApiKey()
         self.data = None
         self.lastUpdated = self._getLastUpdated()
+        self.scriptFirstTimeCalled = True
 
     def _getApiKey(self):
         with open('api_key.txt') as file:
@@ -16,18 +20,21 @@ class StockDataContainer:
     
     def _getLastUpdated(self):
         try:
-            df = pd.read_csv('data/trained_data.csv')
+            df = pd.read_csv('data/' + self.ticker + '/trained_data.csv')
             return df['Date'].iloc[0]
-        except pd.errors.EmptyDataError:
+        except (pd.errors.EmptyDataError, FileNotFoundError):
             return None
     
     def updateAllData(self):
         print("Updating all data...")
+
         self.updateOHLCData()
         self.updateSentimentData()
+        self.updateDateData()
 
-        # Save data
-        self._saveData()
+        # Turn off vpn once done fetching data
+        vpn_script.closeVpn(RUN_SCRIPT)
+
 
     def updateOHLCData(self):
         # Request for all OHLC data
@@ -45,6 +52,14 @@ class StockDataContainer:
         # Check if only need portion of OHLC data
         if self.lastUpdated is not None:
             df = df[df['Date'] > self.lastUpdated]
+        
+        # Make sure OHLC and volume data are all numeric
+        df['Open'] = pd.to_numeric(df['Open'])
+        df['High'] = pd.to_numeric(df['High'])
+        df['Low'] = pd.to_numeric(df['Low'])
+        df['Close'] = pd.to_numeric(df['Close'])
+        df['Volume'] = pd.to_numeric(df['Volume'])
+
 
         # Check if no data is currently stored
         if self.data is None:
@@ -52,9 +67,6 @@ class StockDataContainer:
         else:
             # Fill in OHLC data
             self.data = pd.merge(self.data, df, on='Date')
-
-        # Save data
-        self._saveData()
      
     def updateSentimentData(self):
         # Initialize empty dataframe
@@ -120,9 +132,17 @@ class StockDataContainer:
         else:
             # Fill in sentiment data
             self.data = pd.merge(self.data, df, on='Date')
+       
+    def updateDateData(self):
+        # Split date into individual components to feed into network
+        self.data['Date'] = pd.to_datetime(self.data['Date'])
+        self.data['Year'] = self.data['Date'].dt.year
+        self.data['Month'] = self.data['Date'].dt.month
+        self.data['Day'] = self.data['Date'].dt.day
+        self.data['Day of Week'] = self.data['Date'].dt.dayofweek
 
-        # Save data
-        self._saveData()        
+        # Make sure Date is formatted correctly
+        self.data['Date'] = self.data['Date'].dt.strftime('%Y-%m-%d')
 
     def _parseOHLC(self, rawData):
         parsedData = [] # Holds date, OHLC, and volume data in a 2d list
@@ -175,14 +195,21 @@ class StockDataContainer:
             for key in data:
                 if maxAPICallError in data[key]:
                     print("Max API calls reached")
-                    input("")
                     return True
         return False
     
     def _fixMaxAPICallFail(self, data, url):
+        vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
+        self.scriptFirstTimeCalled = False
+        attemps = 0
         while self._checkMaxAPICall(data):
             r = requests.get(url)
             data = r.json()
+            attemps += 1
+
+            # Refresh vpn again if tried to reconnect multiple times and not working
+            if attemps == 3:
+                vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
         print("API call error resolved")
         return data
 
@@ -194,9 +221,5 @@ class StockDataContainer:
                     return True
         else:
             return False
+        
     
-    def _saveData(self):
-        if not os.path.isdir('data/' + self.ticker):
-            os.makedirs('data/' + self.ticker)
-        # Output all contents in self.data to csv
-        self.data.to_csv('data/' + self.ticker + '/new_data.csv', index=False)
