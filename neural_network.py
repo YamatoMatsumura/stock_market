@@ -1,23 +1,48 @@
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 
 class NeuralNetwork():
     def __init__(self, container):
         self.ticker = container.ticker
         self.data = container.data
+        self.sequenceLength = None
+        self.batchSize = None
+        self.numFeatures = None
     
     def getAllData(self):
         # Save trained data to trained_data.csv
         self.logData()
 
+        # Reverse data so trains from oldest to newest
+        self.data = self.data.iloc[::-1]
+
         # Delete Date Column since can't go into NN
         self.data = self.data.drop(columns=['Date'])
 
         # Convert labels and data to numpy array for NN
-        labels = self.data.pop('Label').values
+        # labels = self.data.pop('Label').values
+        labels = self.data.pop('Close').values
+        self.data = self.data.drop(columns=['Label'])
         data = self.data.values
 
-        return data, labels
+        self.numFeatures = data.shape[1]
+
+        # Create overlapping dataset 
+        self.sequenceLength = 5
+        self.batchSize = 4
+        labels = labels[self.sequenceLength:] # Remove first sequenceLength labels since won't need
+        labels = labels.reshape(-1, 1) # Reshape to 2D labels since data is 3D. Basically just a 2D array where each row just has one label
+
+        dataset = tf.keras.utils.timeseries_dataset_from_array(
+            data,
+            labels,
+            self.sequenceLength,
+            batch_size = self.batchSize
+        )
+
+        return dataset
+    
 
     def labelData(self):
         # See if current day stock price increased or decreased
@@ -36,9 +61,6 @@ class NeuralNetwork():
         self.data = self.data.drop(index=0)
         self.data = self.data.reset_index(drop=True)
 
-    def convertData(self):
-        # Convert the data to a numpy array to feed into NN
-        pass
     def logData(self):
         # Check if existing data in trained_data
         try:
@@ -68,5 +90,15 @@ class NeuralNetwork():
         # Save model at end
         pass
     def getModel(self):
-        # Create the model
-        pass
+        model = tf.keras.Sequential()
+
+        model.add(tf.keras.layers.LSTM(units=64, return_sequences=True, input_shape=(self.sequenceLength, self.numFeatures)))
+
+        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+
+        model.compile(
+            optimizer="adam",
+            loss="binary_crossentropy",
+            metrics=["accuracy"]
+        )
+        return model
