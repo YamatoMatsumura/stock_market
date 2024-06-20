@@ -1,6 +1,11 @@
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+SEQUENCE_LENGTH = 10
+BATCH_SIZE = 5
+N_DAYS = 30
 
 class NeuralNetwork():
     def __init__(self, container):
@@ -21,52 +26,44 @@ class NeuralNetwork():
         self.data = self.data.drop(columns=['Date'])
 
         # Convert labels and data to numpy array for NN
-        # labels = self.data.pop('Label').values
         labels = self.data.pop('Close').values
-        self.data = self.data.drop(columns=['Label'])
         data = self.data.values
+
+        # Scale data to help with fitting
+        scalar = StandardScaler()
+        data = scalar.fit_transform(data)
 
         self.numFeatures = data.shape[1]
 
-        # Create overlapping dataset 
-        self.sequenceLength = 5
-        self.batchSize = 4
+        # Create overlapping dataset
+        self.sequenceLength = SEQUENCE_LENGTH
+        self.batchSize = BATCH_SIZE
         labels = labels[self.sequenceLength:] # Remove first sequenceLength labels since won't need
+        newLabels = []
+        for i in range(len(labels) - N_DAYS + 1):
+            newLabels.append(labels[i : i + N_DAYS])
+        
+        newLabels = np.array(newLabels)
+
         labels = labels.reshape(-1, 1) # Reshape to 2D labels since data is 3D. Basically just a 2D array where each row just has one label
 
         dataset = tf.keras.utils.timeseries_dataset_from_array(
             data,
-            labels,
+            newLabels,
             self.sequenceLength,
             batch_size = self.batchSize
         )
-
         return dataset
-    
-
-    def labelData(self):
-        # See if current day stock price increased or decreased
-        self.data['Difference'] = self.data['Close'] - self.data['Open']
-
-        # Shift up by one to predict next day stock price increase or decrease
-        self.data['Previous Day Difference'] = self.data['Difference'].shift(1)
-
-        # if increased, label as 1, if decreased, label as 0
-        self.data['Label'] = np.where(self.data['Previous Day Difference'] > 0, 1, 0)
-
-        # Drop unneccesary columns
-        self.data = self.data.drop(columns=['Difference' ,'Previous Day Difference'])
-
-        # Remove today since won't have correct label since don't know if stock priced increased/decreased tomorrow
-        self.data = self.data.drop(index=0)
-        self.data = self.data.reset_index(drop=True)
 
     def logData(self):
         # Check if existing data in trained_data
         try:
             # Load and add onto data
             df = pd.read_csv('data/' + self.ticker + '/trained_data.csv')
-            self.data = pd.concat([df, self.data], ignore_index=True)       
+            self.data = pd.concat([df, self.data], ignore_index=True)
+
+            # Make sure no duplicates
+            self.data.drop_duplicates(inplace=True)       
 
             # Make sure dates are in right order
             self.data = self.data.sort_values(by='Date', ascending=False).reset_index(drop=True)
@@ -74,7 +71,7 @@ class NeuralNetwork():
             # save to csv
             self.data.to_csv('data/' + self.ticker + '/trained_data.csv', index=False)   
         # If no pre-existing data  
-        except (pd.errors.EmptyDataError, FileNotFoundError):
+        except (pd.errors.EmptyDataError, FileNotFoundError, OSError):
             #  Save everything to csv
             self.data.to_csv('data/' + self.ticker + '/trained_data.csv', index=False)
 
@@ -83,7 +80,7 @@ class NeuralNetwork():
             # load model
         # if no model already exists
             # Create new model
-        
+
         # Feed all new_data into model
         # Maybe split into test and train? SO maybe make attributes of test and train data?
 
@@ -92,13 +89,18 @@ class NeuralNetwork():
     def getModel(self):
         model = tf.keras.Sequential()
 
-        model.add(tf.keras.layers.LSTM(units=64, return_sequences=True, input_shape=(self.sequenceLength, self.numFeatures)))
+        model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=128, return_sequences=True, input_shape=(self.sequenceLength, self.numFeatures))))
+        model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=64, return_sequences=True)))
+        model.add(tf.keras.layers.LSTM(units=64))
+        model.add(tf.keras.layers.Dense(32, kernel_regularizer=tf.keras.regularizers.l1(l1=0.01), activation='relu'))
+        model.add(tf.keras.layers.Dropout(0.2))
 
-        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+        # Output layer
+        model.add(tf.keras.layers.Dense(N_DAYS))
 
         model.compile(
             optimizer="adam",
-            loss="binary_crossentropy",
-            metrics=["accuracy"]
+            loss="mean_squared_error",
+            metrics=["mean_absolute_error"]
         )
         return model
