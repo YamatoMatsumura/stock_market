@@ -1,23 +1,40 @@
 import requests
 import pandas as pd
 import datetime as dt
+import os
+import json
 
 import vpn_script
 
 RUN_SCRIPT = True
+WINDOW_SIZE = 30
+ANALYTICS_RANGE = '3year'
 
 class StockDataContainer:
     def __init__(self, ticker):
         self.ticker = ticker
-        self.apiKey = self._getApiKey()
+        self.apiKey_AV = None
+        self.apiKey_Polygon = None
         self.data = None
         self.lastUpdated = self._getLastUpdated()
         self.scriptFirstTimeCalled = True
 
-    def _getApiKey(self):
-        with open('api_key.txt') as file:
-            return file.read()
+        # Create folder to store data
+        self._createContainerFolder()
+
+        # Grab all API Keys
+        self._getApiKey()
     
+    def _createContainerFolder(self):
+        if not os.path.exists('data/' + self.ticker):
+            os.makedirs('data/' + self.ticker)
+
+    def _getApiKey(self):
+        with open('api_keys/Polygon.txt') as file:
+            self.apiKey_Polygon = file.read()
+        with open('api_Keys/AlphaVantage.txt') as file:
+            self.apiKey_AV = file.read()
+
     def _getLastUpdated(self):
         try:
             df = pd.read_csv('data/' + self.ticker + '/trained_data.csv')
@@ -30,36 +47,37 @@ class StockDataContainer:
 
         self.updateOHLCData()
         self.updateSentimentData()
-        self.updateDateData()
+        # self.updateDateData()
 
         # Turn off vpn once done fetching data
         vpn_script.closeVpn(RUN_SCRIPT)
 
 
     def updateOHLCData(self):
-        # Request for all OHLC data
-        url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=' + self.ticker + '&outputsize=full&apikey=' + self.apiKey
-        r = requests.get(url)
-        rawData = r.json()
+        # Call Polygon API to get OHLC data
+        endDate = dt.datetime.today().strftime('%Y-%m-%d')
+        startDate = '2022-05-20' # Cutoff date for OHLC data
+        url = f'https://api.polygon.io/v2/aggs/ticker/{self.ticker}/range/1/day/{startDate}/{endDate}?apiKey={self.apiKey_Polygon}'
+        response = requests.get(url)
+        df = pd.DataFrame(response.json()['results'])
 
-        # Check and fix max api call errors
-        if self._checkMaxAPICall(rawData):
-            rawData = self._fixMaxAPICallFail(rawData, url)
+        # Format response
+        df['Date'] = pd.to_datetime(df['t'] / 1000, unit='s')
+        df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
+        df = df.rename(columns= {
+            'v': 'Volume',
+            'vw': 'Volume Weighted Average',
+            'o': 'Open',
+            'c': 'Close',
+            'h': 'High',
+            'l': 'Low',
+            'n': 'Transactions'
+            })
+        df.drop(columns=['t'], inplace=True)
+        df = df.iloc[:, [7, 2, 4, 5, 3, 0, 1, 6]]
 
-        # Format data into pandas df
-        df = self._parseOHLC(rawData)
-
-        # Check if only need portion of OHLC data
-        if self.lastUpdated is not None:
-            df = df[df['Date'] > self.lastUpdated]
-        
-        # Make sure OHLC and volume data are all numeric
-        df['Open'] = pd.to_numeric(df['Open'])
-        df['High'] = pd.to_numeric(df['High'])
-        df['Low'] = pd.to_numeric(df['Low'])
-        df['Close'] = pd.to_numeric(df['Close'])
-        df['Volume'] = pd.to_numeric(df['Volume'])
-
+        # Reverse so newest date is at the top
+        df = df.iloc[::-1]
 
         # Check if no data is currently stored
         if self.data is None:
@@ -67,6 +85,7 @@ class StockDataContainer:
         else:
             # Fill in OHLC data
             self.data = pd.merge(self.data, df, on='Date')
+            self.data.drop_duplicates(inplace=True)
      
     def updateSentimentData(self):
         # Initialize empty dataframe
@@ -77,11 +96,6 @@ class StockDataContainer:
         dayDelta = 0
 
         while True:
-            #---------------------------------------
-            # Debug line, delete later
-            if dayDelta == 20:
-                break
-            #--------------------------------------
 
             # Initialize time frame to 24 hours
             day = dt.datetime.now() - dt.timedelta(days=dayDelta)
@@ -93,7 +107,7 @@ class StockDataContainer:
                     '&tickers=' + self.ticker + 
                     '&time_from=' + timeFrom + 
                     '&time_to=' + timeTo + 
-                    '&apikey=' + self.apiKey)
+                    '&apikey=' + self.apiKey_AV)
             r = requests.get(url)
             rawData = r.json()
 
@@ -143,6 +157,26 @@ class StockDataContainer:
 
         # Make sure Date is formatted correctly
         self.data['Date'] = self.data['Date'].dt.strftime('%Y-%m-%d')
+    
+    def updateMeanData(self):
+        url = ('https://alphavantageapi.co/timeseries/running_analytics?' 
+               'SYMBOLS=' + self.ticker + 
+               '&RANGE=' + ANALYTICS_RANGE +
+               '&INTERVAL=DAILY'
+               '&WINDOW_SIZE=' + str(WINDOW_SIZE) + 
+               '&CALCULATIONS=MEAN'
+               '&apikey=' + self.apiKey_AV) 
+        r = requests.get(url) 
+        data = r.json()['payload']['RETURNS_CALCULATIONS']['MEAN']['RUNNING_MEAN'][self.ticker]
+        data = data.items()
+        df = pd.DataFrame(data, columns=['Date', 'Mean'])
+        
+        # Check if no data is currently stored
+        if self.data is None:
+            self.data = df
+        else:
+            # Fill in sentiment data
+            self.data = pd.merge(self.data, df, on='Date')
 
     def _parseOHLC(self, rawData):
         parsedData = [] # Holds date, OHLC, and volume data in a 2d list
@@ -210,6 +244,7 @@ class StockDataContainer:
             # Refresh vpn again if tried to reconnect multiple times and not working
             if attemps == 3:
                 vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
+                attemps = 0
         print("API call error resolved")
         return data
 
