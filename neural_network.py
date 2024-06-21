@@ -4,7 +4,7 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 SEQUENCE_LENGTH = 10
-BATCH_SIZE = 5
+BATCH_SIZE = 3
 N_DAYS = 30
 
 class NeuralNetwork():
@@ -61,6 +61,12 @@ class NeuralNetwork():
             # Load and add onto data
             df = pd.read_csv('data/' + self.ticker + '/trained_data.csv')
             self.data = pd.concat([df, self.data], ignore_index=True)
+
+            # Merge duplicate date days and fill in data by cross referencing rows
+            self.data = self.data.groupby('Date').apply(lambda x: x.ffill().bfill().iloc[0]).reset_index(drop=True)
+
+            # Get rid of all rows with missing data
+            self.data = self.data.replace('', np.nan).dropna(axis=0, how='any').reset_index(drop=True)
 
             # Make sure no duplicates
             self.data.drop_duplicates(inplace=True)       
