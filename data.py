@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 import datetime as dt
 import os
-import json
+import random
 
 import vpn_script
 
@@ -15,6 +15,7 @@ class StockDataContainer:
         self.ticker = ticker
         self.apiKey_AV = None
         self.apiKey_Polygon = None
+        self.AVKeyCount = None
         self.data = None
         self.lastUpdated = self._getLastUpdated()
         self.scriptFirstTimeCalled = True
@@ -24,6 +25,9 @@ class StockDataContainer:
 
         # Grab all API Keys
         self._getApiKey()
+
+        # Count number of AV keys to cycle through
+        self._countAVKeys()
     
     def _createContainerFolder(self):
         if not os.path.exists('data/' + self.ticker):
@@ -32,8 +36,16 @@ class StockDataContainer:
     def _getApiKey(self):
         with open('api_keys/Polygon.txt') as file:
             self.apiKey_Polygon = file.read()
-        with open('api_Keys/AlphaVantage.txt') as file:
+        with open('api_Keys/AV/key0.txt') as file:
             self.apiKey_AV = file.read()
+    
+    def _countAVKeys(self):
+        self.AVKeyCount = 0
+        contents = os.listdir('api_keys/AV')
+        for item in contents:
+            itemPath = os.path.join('api_keys/AV', item)
+            if os.path.isfile(itemPath):
+                self.AVKeyCount += 1
 
     def _getLastUpdated(self):
         try:
@@ -47,6 +59,7 @@ class StockDataContainer:
 
         self.updateOHLCData()
         self.updateSentimentData()
+        self.updateMeanData()
         # self.updateDateData()
 
         # Turn off vpn once done fetching data
@@ -159,16 +172,28 @@ class StockDataContainer:
         self.data['Date'] = self.data['Date'].dt.strftime('%Y-%m-%d')
     
     def updateMeanData(self):
-        url = ('https://alphavantageapi.co/timeseries/running_analytics?' 
-               'SYMBOLS=' + self.ticker + 
+        # Make API Call
+        url = ('https://www.alphavantage.co/query?' + 
+               'function=ANALYTICS_SLIDING_WINDOW' + 
+               '&SYMBOLS=' + self.ticker + 
                '&RANGE=' + ANALYTICS_RANGE +
-               '&INTERVAL=DAILY'
+               '&INTERVAL=DAILY' + 
+               '&OHLC=close'
                '&WINDOW_SIZE=' + str(WINDOW_SIZE) + 
-               '&CALCULATIONS=MEAN'
-               '&apikey=' + self.apiKey_AV) 
-        r = requests.get(url) 
-        data = r.json()['payload']['RETURNS_CALCULATIONS']['MEAN']['RUNNING_MEAN'][self.ticker]
+               '&CALCULATIONS=MEAN' +
+               '&apikey=' + self.apiKey_AV)
+        r = requests.get(url)
+        data = r.json()
+
+        # Check and fix max api call error
+        if self._checkMaxAPICall(data):
+            data = self._fixMaxAPICallFail(data, url)
+        
+        # Parse data
+        data = data['payload']['RETURNS_CALCULATIONS']['MEAN']['RUNNING_MEAN'][self.ticker]
         data = data.items()
+
+        # Convert to pandas df
         df = pd.DataFrame(data, columns=['Date', 'Mean'])
         
         # Check if no data is currently stored
@@ -225,21 +250,39 @@ class StockDataContainer:
 
     def _checkMaxAPICall(self, data):
         maxAPICallError = "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day."
-        if 'Information' in data.keys() or 'Note' in data.keys():
+        if 'Information' in data.keys() or 'Note' in data.keys() or 'error' in data.keys():
+            if 'error' in data.keys():
+                return True
             for key in data:
                 if maxAPICallError in data[key]:
-                    print("Max API calls reached")
                     return True
         return False
     
     def _fixMaxAPICallFail(self, data, url):
-        vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
-        self.scriptFirstTimeCalled = False
-        attemps = 0
+        print("Max API calls reached")
+
+        attemps = 0 # Counter to retry fixing method if multiple failed attemps
+
+        # If need new api key
+        if 'error' in data.keys():
+            self._getNewAVAPIKey()
+            url = self._getNewAVURL(url)
+        # If need to refresh VPN
+        else:
+            vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
+            self.scriptFirstTimeCalled = False
+
+        # Keep trying to make request until max api call doesn't happen
         while self._checkMaxAPICall(data):
             r = requests.get(url)
             data = r.json()
             attemps += 1
+
+            # If just need a new api key
+            if 'error' in data.keys():
+                self._getNewAVAPIKey()
+                url = self._getNewAVURL(url)
+                continue
 
             # Refresh vpn again if tried to reconnect multiple times and not working
             if attemps == 3:
@@ -256,5 +299,13 @@ class StockDataContainer:
                     return True
         else:
             return False
-        
     
+    def _getNewAVAPIKey(self):
+        nextKeyPath = 'api_keys/AV/key' + str(random.randint(0, self.AVKeyCount - 1)) + '.txt'
+        with open(nextKeyPath) as file:
+            self.apiKey_AV = file.read()
+    
+    def _getNewAVURL(self, url):
+        url = url[:-16]
+        url += self.apiKey_AV
+        return url
