@@ -93,12 +93,11 @@ class StockDataContainer:
         df = df.iloc[::-1]
 
         # Check if no data is currently stored
-        if self.data is None:
+        if self.data is None or self.data.empty:
             self.data = df
         else:
             # Fill in OHLC data
-            self.data = pd.merge(self.data, df, on='Date')
-            self.data.drop_duplicates(inplace=True)
+            self.data = pd.concat([self.data, df], axis=0, join='outer')
      
     def updateSentimentData(self):
         # Initialize empty dataframe
@@ -123,9 +122,6 @@ class StockDataContainer:
                     '&apikey=' + self.apiKey_AV)
             r = requests.get(url)
             rawData = r.json()
-
-            # with open('Sentiment-AMZN.json', 'w') as file:
-            #     json.dump(rawData, file)
 
             # Check for max api call error
             if self._checkMaxAPICall(rawData):
@@ -154,12 +150,12 @@ class StockDataContainer:
         df = df[df['Number of Articles'] != 0]
 
         # Check if no data is currently stored
-        if self.data is None:
+        if self.data is None or self.data.empty:
             self.data = df
         else:
-            # Fill in sentiment data
-            self.data = pd.merge(self.data, df, on='Date')
-       
+            # Fill in Sentiment data
+            self.data = pd.concat([self.data, df], axis=0, join='outer')
+
     def updateDateData(self):
         # Split date into individual components to feed into network
         self.data['Date'] = pd.to_datetime(self.data['Date'])
@@ -188,20 +184,21 @@ class StockDataContainer:
         # Check and fix max api call error
         if self._checkMaxAPICall(data):
             data = self._fixMaxAPICallFail(data, url)
-        
+
         # Parse data
         data = data['payload']['RETURNS_CALCULATIONS']['MEAN']['RUNNING_MEAN'][self.ticker]
         data = data.items()
 
         # Convert to pandas df
         df = pd.DataFrame(data, columns=['Date', 'Mean'])
+        df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         
         # Check if no data is currently stored
-        if self.data is None:
+        if self.data is None or self.data.empty:
             self.data = df
         else:
             # Fill in sentiment data
-            self.data = pd.merge(self.data, df, on='Date')
+            self.data = pd.concat([self.data, df], axis=0, join='outer')
 
     def _parseOHLC(self, rawData):
         parsedData = [] # Holds date, OHLC, and volume data in a 2d list
