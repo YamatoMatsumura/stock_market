@@ -3,6 +3,7 @@ import pandas as pd
 import datetime as dt
 import os
 import random
+import json
 
 import vpn_script
 
@@ -65,6 +66,7 @@ class StockDataContainer:
         self.updateVarianceData()
         self.updateDevData()
         self.updateMedianData()
+        self.updateSMAData()
         # self.updateDateData()
 
         # Turn off vpn once done fetching data
@@ -187,14 +189,38 @@ class StockDataContainer:
     def updateDevData(self):
         self._updateAnalyticsData('STDDEV', 'STDDEV')
     
+    def updateSMAData(self):
+        self._updateTechnicalIndicatorData('SMA')
+    
     def _updateTechnicalIndicatorData(self, category):
         # Make API Call
-        url = ('https://ww.alphavantage.co/query?' +
+        url = ('https://www.alphavantage.co/query?' +
                'function=' + category +
-               'symbol=' + self.ticker +
-               'interval=daily' + 
-               'time_period=' + TECHNICAL_INDICATOR_WINDOW
-               )
+               '&symbol=' + self.ticker +
+               '&interval=daily' + 
+               '&time_period=' + str(TECHNICAL_INDICATOR_WINDOW) +
+               '&series_type=close' + 
+               '&apikey=' + self.apiKey_AV)
+        r = requests.get(url)
+        data = r.json()
+
+        # Check and fix max api call error
+        if self._checkMaxAPICall(data):
+            data = self._fixMaxAPICallFail(data, url)
+
+        # Parse data
+        data = data['Technical Analysis: ' + category]
+        df = pd.DataFrame.from_dict(data, orient='index')
+        df.reset_index(inplace=True)
+        df.rename(columns={'index': 'Date'}, inplace=True)
+
+        # Check if no data is currently stored
+        if self.data is None or self.data.empty:
+            self.data = df
+        else:
+            # Fill in sentiment data
+            self.data = pd.concat([self.data, df], axis=0, join='outer')
+
     
     def _updateAnalyticsData(self, category, categoryName, annualized=False):
         # Make API Call
