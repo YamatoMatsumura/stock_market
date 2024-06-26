@@ -9,6 +9,7 @@ import vpn_script
 RUN_SCRIPT = True
 WINDOW_SIZE = 30
 ANALYTICS_RANGE = '3year'
+TECHNICAL_INDICATOR_WINDOW = 30
 
 class StockDataContainer:
     def __init__(self, ticker):
@@ -60,6 +61,10 @@ class StockDataContainer:
         self.updateOHLCData()
         self.updateSentimentData()
         self.updateMeanData()
+        self.updateReturnData()
+        self.updateVarianceData()
+        self.updateDevData()
+        self.updateMedianData()
         # self.updateDateData()
 
         # Turn off vpn once done fetching data
@@ -168,6 +173,30 @@ class StockDataContainer:
         self.data['Date'] = self.data['Date'].dt.strftime('%Y-%m-%d')
     
     def updateMeanData(self):
+        self._updateAnalyticsData('MEAN', 'Mean')
+    
+    def updateMedianData(self):
+        self._updateAnalyticsData('MEDIAN', 'Median')
+
+    def updateReturnData(self):
+        self._updateAnalyticsData('CUMULATIVE_RETURN', 'Cumulative Return')
+    
+    def updateVarianceData(self):
+        self._updateAnalyticsData('VARIANCE', 'Variance')
+    
+    def updateDevData(self):
+        self._updateAnalyticsData('STDDEV', 'STDDEV')
+    
+    def _updateTechnicalIndicatorData(self, category):
+        # Make API Call
+        url = ('https://ww.alphavantage.co/query?' +
+               'function=' + category +
+               'symbol=' + self.ticker +
+               'interval=daily' + 
+               'time_period=' + TECHNICAL_INDICATOR_WINDOW
+               )
+    
+    def _updateAnalyticsData(self, category, categoryName, annualized=False):
         # Make API Call
         url = ('https://www.alphavantage.co/query?' + 
                'function=ANALYTICS_SLIDING_WINDOW' + 
@@ -176,7 +205,7 @@ class StockDataContainer:
                '&INTERVAL=DAILY' + 
                '&OHLC=close'
                '&WINDOW_SIZE=' + str(WINDOW_SIZE) + 
-               '&CALCULATIONS=MEAN' +
+               '&CALCULATIONS=' + category +
                '&apikey=' + self.apiKey_AV)
         r = requests.get(url)
         data = r.json()
@@ -185,12 +214,18 @@ class StockDataContainer:
         if self._checkMaxAPICall(data):
             data = self._fixMaxAPICallFail(data, url)
 
+        # Adjusted name to take out annualized bit if needed
+        if not annualized:
+            adjustedName = category
+        else:
+            adjustedName = category[:-17]
+
         # Parse data
-        data = data['payload']['RETURNS_CALCULATIONS']['MEAN']['RUNNING_MEAN'][self.ticker]
+        data = data['payload']['RETURNS_CALCULATIONS'][category]['RUNNING_' + adjustedName][self.ticker]
         data = data.items()
 
         # Convert to pandas df
-        df = pd.DataFrame(data, columns=['Date', 'Mean'])
+        df = pd.DataFrame(data, columns=['Date', categoryName])
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         
         # Check if no data is currently stored
@@ -199,6 +234,7 @@ class StockDataContainer:
         else:
             # Fill in sentiment data
             self.data = pd.concat([self.data, df], axis=0, join='outer')
+
 
     def _parseOHLC(self, rawData):
         parsedData = [] # Holds date, OHLC, and volume data in a 2d list
@@ -219,6 +255,7 @@ class StockDataContainer:
 
         # Return pandas data frame
         return pd.DataFrame(parsedData, columns=columns)
+
     
     def _parseSentiment(self, data):
         # Grab time, average sentiment, and total article data
