@@ -5,18 +5,18 @@ import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
-import pandas as pd
+import shap
 
-EPOCHS = 60
+EPOCHS = 100
 TEST_SIZE= 0.1
-BATCH_SIZE = 5
+BATCH_SIZE = 1
 RETRAIN_MODEL = True
+UPDATE_DATA = True
 
 def main():
     amazonData = StockDataContainer('AMZN')
-    # amazonData.updateAllData()
-    amazonData.updateMeanData()
-    return
+    if UPDATE_DATA:
+        amazonData.updateAllData()
 
     amazonNN = NeuralNetwork(amazonData)
     dataset = amazonNN.getAllData()
@@ -29,24 +29,11 @@ def main():
     dataTrain, dataTest, labelTrain, labelTest = train_test_split(data, label, test_size=TEST_SIZE, shuffle=False)
 
     if RETRAIN_MODEL:
-        earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-        history = model.fit(dataTrain, labelTrain, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(dataTest, labelTest), callbacks=[earlyStopping])
+        earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
+        model.fit(dataTrain, labelTrain, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(dataTest, labelTest), callbacks=[earlyStopping])
         model.save('data/' + amazonNN.ticker + '/model.keras')
     else:
         model = tf.keras.models.load_model('data/' + amazonNN.ticker + '/model.keras')
-    
-    # Plot training and validation loss
-    plt.figure(figsize=(10, 6))
-    plt.plot(history.history['loss'], label='Training Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Validation Loss')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-    return
 
     predictions = model.predict(dataTest)
 
