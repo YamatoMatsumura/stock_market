@@ -4,7 +4,7 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 SEQUENCE_LENGTH = 10
-BATCH_SIZE = 3
+BATCH_SIZE = 1
 N_DAYS = 30
 
 class NeuralNetwork():
@@ -51,7 +51,7 @@ class NeuralNetwork():
             data,
             newLabels,
             self.sequenceLength,
-            batch_size = self.batchSize
+            batch_size = self.batchSize,
         )
         return dataset
 
@@ -96,10 +96,19 @@ class NeuralNetwork():
         model = tf.keras.Sequential()
 
         model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=128, return_sequences=True, input_shape=(self.sequenceLength, self.numFeatures))))
+        model.add(tf.keras.layers.Dropout(0.3))
+
         model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=64, return_sequences=True)))
-        model.add(tf.keras.layers.LSTM(units=64))
+        model.add(tf.keras.layers.Dropout(0.3))
+
+        model.add(tf.keras.layers.LSTM(units=64, return_sequences=True))
+        model.add(tf.keras.layers.Dropout(0.3))
+
+        model.add(tf.keras.layers.LSTM(units=32))
+        model.add(tf.keras.layers.Dropout(0.3))
+
         model.add(tf.keras.layers.Dense(32, kernel_regularizer=tf.keras.regularizers.l1(l1=0.01), activation='relu'))
-        model.add(tf.keras.layers.Dropout(0.2))
+        model.add(tf.keras.layers.Dropout(0.3))
 
         # Output layer
         model.add(tf.keras.layers.Dense(N_DAYS))
