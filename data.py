@@ -3,7 +3,6 @@ import pandas as pd
 import datetime as dt
 import os
 import random
-import json
 
 import vpn_script
 
@@ -11,6 +10,7 @@ RUN_SCRIPT = True
 WINDOW_SIZE = 30
 ANALYTICS_RANGE = '3year'
 TECHNICAL_INDICATOR_WINDOW = 30
+SENTIMENT_MISSING_PERCENT = 0.2
 
 class StockDataContainer:
     def __init__(self, ticker):
@@ -59,14 +59,23 @@ class StockDataContainer:
     def updateAllData(self):
         print("Updating all data...")
 
+        # self.updateSentimentData()
         self.updateOHLCData()
-        self.updateSentimentData()
         self.updateMeanData()
         self.updateReturnData()
         self.updateVarianceData()
-        self.updateDevData()
+        self.updateSTDDevData()
         self.updateMedianData()
         self.updateSMAData()
+        self.updateEMAData()
+        self.updateSTOCHData()
+        self.updateRSIData()
+        self.updateADXData()
+        self.updateCCIData()
+        self.updateAROONData()
+        self.updateBBANDSData()
+        self.updateADData()
+        self.updateOBVData()
         # self.updateDateData()
 
         # Turn off vpn once done fetching data
@@ -76,7 +85,7 @@ class StockDataContainer:
     def updateOHLCData(self):
         # Call Polygon API to get OHLC data
         endDate = dt.datetime.today().strftime('%Y-%m-%d')
-        startDate = '2022-05-20' # Cutoff date for OHLC data
+        startDate = '2022-05-20' # Cutoff date is roughly 2 years before current date
         url = f'https://api.polygon.io/v2/aggs/ticker/{self.ticker}/range/1/day/{startDate}/{endDate}?apiKey={self.apiKey_Polygon}'
         response = requests.get(url)
         df = pd.DataFrame(response.json()['results'])
@@ -115,6 +124,16 @@ class StockDataContainer:
         dayDelta = 0
 
         while True:
+            # Check halfway through if too many missing data points
+            if dayDelta == 365:
+                missingDataCount = (df['Number of Articles'] == 0).sum()
+                if missingDataCount > len(df) * SENTIMENT_MISSING_PERCENT:
+                    print(f"Missing more than {SENTIMENT_MISSING_PERCENT * 100}% of sentiment data, not including...")
+                    return
+            
+            # Cutoff at 2 years (plus some more just to be safe) since OHLC date cuts off about 2 years before current date
+            if dayDelta == 365*2 + 30:
+                break
 
             # Initialize time frame to 24 hours
             day = dt.datetime.now() - dt.timedelta(days=dayDelta)
@@ -153,6 +172,7 @@ class StockDataContainer:
             if self.lastUpdated == (dt.datetime.now() - dt.timedelta(days=dayDelta)).strftime('%Y-%m-%d'):
                 break
 
+
         # Delete rows with missing data
         df = df[df['Number of Articles'] != 0]
 
@@ -186,30 +206,60 @@ class StockDataContainer:
     def updateVarianceData(self):
         self._updateAnalyticsData('VARIANCE', 'Variance')
     
-    def updateDevData(self):
+    def updateSTDDevData(self):
         self._updateAnalyticsData('STDDEV', 'STDDEV')
     
     def updateSMAData(self):
         self._updateTechnicalIndicatorData('SMA')
     
-    def _updateTechnicalIndicatorData(self, category):
+    def updateEMAData(self):
+        self._updateTechnicalIndicatorData('EMA')
+    
+    def updateSTOCHData(self):
+        self._updateTechnicalIndicatorData('STOCH')
+    
+    def updateRSIData(self):
+        self._updateTechnicalIndicatorData('RSI')
+    
+    def updateADXData(self):
+        self._updateTechnicalIndicatorData('ADX')
+
+    def updateCCIData(self):
+        self._updateTechnicalIndicatorData('CCI')
+    
+    def updateAROONData(self):
+        self._updateTechnicalIndicatorData('AROON')
+    
+    def updateBBANDSData(self):
+        self._updateTechnicalIndicatorData('BBANDS')
+    
+    def updateADData(self):
+        self._updateTechnicalIndicatorData('AD', 'Chaikin A/D')
+    
+    def updateOBVData(self):
+        self._updateTechnicalIndicatorData('OBV')
+
+    def _updateTechnicalIndicatorData(self, category, customCategory=False):
         # Make API Call
         url = ('https://www.alphavantage.co/query?' +
                'function=' + category +
                '&symbol=' + self.ticker +
                '&interval=daily' + 
-               '&time_period=' + str(TECHNICAL_INDICATOR_WINDOW) +
+               '&time_period=' + str(TECHNICAL_INDICATOR_WINDOW) + 
                '&series_type=close' + 
-               '&apikey=' + self.apiKey_AV)
-        r = requests.get(url)
-        data = r.json()
+               '&apikey=' + self.apiKey_AV) 
+        r = requests.get(url) 
+        data = r.json() 
 
         # Check and fix max api call error
         if self._checkMaxAPICall(data):
             data = self._fixMaxAPICallFail(data, url)
 
         # Parse data
-        data = data['Technical Analysis: ' + category]
+        if customCategory:
+            data = data['Technical Analysis: ' + customCategory]
+        else:
+            data = data['Technical Analysis: ' + category]
         df = pd.DataFrame.from_dict(data, orient='index')
         df.reset_index(inplace=True)
         df.rename(columns={'index': 'Date'}, inplace=True)
@@ -319,8 +369,6 @@ class StockDataContainer:
         return False
     
     def _fixMaxAPICallFail(self, data, url):
-        print("Max API calls reached")
-
         attemps = 0 # Counter to retry fixing method if multiple failed attemps
 
         # If need new api key
@@ -348,7 +396,6 @@ class StockDataContainer:
             if attemps == 3:
                 vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
                 attemps = 0
-        print("API call error resolved")
         return data
 
     def _checkSentimentError(self, data):
