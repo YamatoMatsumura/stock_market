@@ -1,27 +1,39 @@
 from data import StockDataContainer
 from neural_network import NeuralNetwork
 import numpy as np
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import tensorflow as tf
+import keras_tuner as kt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
-import shap
 
-EPOCHS = 100
-TEST_SIZE= 0.1
+
+EPOCHS = 150
+TEST_SIZE= 0.05
 BATCH_SIZE = 1
+UPDATE_DATA = False
 RETRAIN_MODEL = True
-UPDATE_DATA = True
 
 def main():
     amazonData = StockDataContainer('AMZN')
     if UPDATE_DATA:
         amazonData.updateAllData()
-
+    
     amazonNN = NeuralNetwork(amazonData)
-    dataset = amazonNN.getAllData()
+    amazonNN.logData()
+    dataset, scalarLabels = amazonNN.getDataLabels()
 
-    model = amazonNN.getModel()
+    # model = amazonNN.getModel()
+    tuner = kt.BayesianOptimization(
+        amazonNN.getModel,
+        objective='val_loss',
+        max_trials=15,
+        num_initial_points=3,
+        directory=f"data/{amazonNN.ticker}",
+        project_name=f"Hyperparam Tuning"
+    )
 
     data = np.concatenate(list(dataset.map(lambda x, y: x)))
     label = np.concatenate(list(dataset.map(lambda x, y: y)))
@@ -30,17 +42,26 @@ def main():
 
     if RETRAIN_MODEL:
         earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
-        model.fit(dataTrain, labelTrain, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(dataTest, labelTest), callbacks=[earlyStopping])
-        model.save('data/' + amazonNN.ticker + '/model.keras')
+        tuner.search(x=dataTrain, y=labelTrain, epochs=EPOCHS, validation_data=(dataTest, labelTest), callbacks=[earlyStopping])
+        print("search initialized")
+        input()
+        # model.fit(dataTrain, labelTrain, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(dataTest, labelTest), callbacks=[earlyStopping])
+        # model.save('data/' + amazonNN.ticker + '/model.keras')
     else:
         model = tf.keras.models.load_model('data/' + amazonNN.ticker + '/model.keras')
+    
+    bestHps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    print(f'Best hyperparameters: {bestHps.values}')
+
+    model = tuner.hypermodel.build(bestHps)
+    model.fit(dataTrain, labelTrain, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(dataTest, labelTest), callbacks=[earlyStopping])
 
     predictions = model.predict(dataTest)
+    predictions = scalarLabels.inverse_transform(predictions)
+    labelTest = scalarLabels.inverse_transform(labelTest)
 
-    total = 0
     for i in range(len(labelTest)):
         rmse = np.sqrt(mean_squared_error(labelTest[i], predictions[i]))
-        total += rmse
         print("RMSE: ", rmse)
         # Plotting
         plt.figure(figsize=(10, 6))
@@ -62,7 +83,6 @@ def main():
 
         # Show plot
         plt.show()
-    print(f'Average RMSE: {total / i}')
 
 if __name__ == '__main__':
     main()

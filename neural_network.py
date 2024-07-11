@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-SEQUENCE_LENGTH = 10
+SEQUENCE_LENGTH = 30
 BATCH_SIZE = 1
 N_DAYS = 30
 
@@ -15,9 +15,7 @@ class NeuralNetwork():
         self.batchSize = None
         self.numFeatures = None
     
-    def getAllData(self):
-        # Save trained data to trained_data.csv
-        self.logData()
+    def getDataLabels(self):
 
         # Reverse data so trains from oldest to newest
         self.data = self.data.iloc[::-1]
@@ -30,8 +28,15 @@ class NeuralNetwork():
         data = self.data.values
 
         # Scale data to help with fitting
-        scalar = StandardScaler()
-        data = scalar.fit_transform(data)
+        scalarData = MinMaxScaler()
+        scalarLabels = MinMaxScaler()
+        data = scalarData.fit_transform(data)
+
+        # Reshape labels into 2D array since MinMaxSclar needs 2D array
+        labels = labels.reshape(-1, 1)
+        labels = scalarLabels.fit_transform(labels)
+        # Reshape labels back into 1D array
+        labels = labels.flatten()
 
         self.numFeatures = data.shape[1]
 
@@ -53,7 +58,7 @@ class NeuralNetwork():
             self.sequenceLength,
             batch_size = self.batchSize,
         )
-        return dataset
+        return dataset, scalarLabels
 
     def logData(self):
         # Check if existing data in trained_data
@@ -77,7 +82,16 @@ class NeuralNetwork():
             # save to csv
             self.data.to_csv('data/' + self.ticker + '/trained_data.csv', index=False)   
         # If no pre-existing data  
-        except (pd.errors.EmptyDataError, FileNotFoundError, OSError):
+        except:
+            # Merge duplicate date days and fill in data by cross referencing rows
+            self.data = self.data.groupby('Date').apply(lambda x: x.ffill().bfill().iloc[0]).reset_index(drop=True)
+
+            # Get rid of all rows with missing data
+            self.data = self.data.replace('', np.nan).dropna(axis=0, how='any').reset_index(drop=True)
+
+            # Make sure dates are in right order
+            self.data = self.data.sort_values(by='Date', ascending=False).reset_index(drop=True)
+
             #  Save everything to csv
             self.data.to_csv('data/' + self.ticker + '/trained_data.csv', index=False)
 
@@ -92,25 +106,50 @@ class NeuralNetwork():
 
         # Save model at end
         pass
-    def getModel(self):
+    def getModel(self, hp):
         model = tf.keras.Sequential()
 
-        model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=128, return_sequences=True, input_shape=(self.sequenceLength, self.numFeatures))))
-        model.add(tf.keras.layers.Dropout(0.3))
+        # Layer 1
+        hpUnits1 = hp.Choice('units: 1', values=[8,12,16,32,64])
+        hpRecurrentDropouts1 = hp.Float('recurrent dropout: 1', min_value=0.0, max_value=0.5, step=0.1)
+        model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
+            units=hpUnits1,
+            return_sequences=True,
+            input_shape=(self.sequenceLength, self.numFeatures),
+            recurrent_dropout=hpRecurrentDropouts1
+        )))
 
-        model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=64, return_sequences=True)))
-        model.add(tf.keras.layers.Dropout(0.3))
+        # Layer 2
+        skipBidirectional = hp.Boolean('Skip optional Bidirectional')
+        if not skipBidirectional:
+            hpUnits2 = hp.Choice('units: 2', values=[4,8,12,16,32])
+            hpRecurrentDropouts2 = hp.Float('recurrent dropout: 2', min_value=0.0, max_value=0.5, step=0.1)
+            model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
+                units=hpUnits2,
+                return_sequences=True,
+                recurrent_dropout=hpRecurrentDropouts2
+            )))
 
-        model.add(tf.keras.layers.LSTM(units=64, return_sequences=True))
-        model.add(tf.keras.layers.Dropout(0.3))
+        # Layer 3
+        skipRegular = hp.Boolean('Skip optional regular')
+        if not skipRegular:
+            hpUnits4 = hp.Choice('units: 3', values=[2,4,6,8,12,16])
+            hpRecurrentDropouts4 = hp.Float('recurrent dropout: 3', min_value=0.0, max_value=0.5, step=0.1)
+            model.add(tf.keras.layers.LSTM(
+                units=hpUnits4,
+                return_sequences=True,
+                recurrent_dropout=hpRecurrentDropouts4
+            ))
 
-        model.add(tf.keras.layers.LSTM(units=32))
-        model.add(tf.keras.layers.Dropout(0.3))
+        # Layer 4
+        hpUnits3 = hp.Choice('units: 4', values=[2,4,6,8,12,16])
+        hpRecurrentDropouts3 = hp.Float('recurrent dropout: 4', min_value=0.0, max_value=0.5, step=0.1)
+        model.add(tf.keras.layers.LSTM(
+            units=hpUnits3,
+            recurrent_dropout=hpRecurrentDropouts3
+        ))
 
-        model.add(tf.keras.layers.Dense(32, kernel_regularizer=tf.keras.regularizers.l1(l1=0.01), activation='relu'))
-        model.add(tf.keras.layers.Dropout(0.3))
-
-        # Output layer
+        # Output Layer
         model.add(tf.keras.layers.Dense(N_DAYS))
 
         model.compile(
@@ -118,4 +157,32 @@ class NeuralNetwork():
             loss="mean_squared_error",
             metrics=["mean_absolute_error"]
         )
+
         return model
+
+
+        # model = tf.keras.Sequential()
+
+        # model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
+        #     units=32, 
+        #     return_sequences=True, 
+        #     input_shape=(self.sequenceLength, self.numFeatures),
+        #     recurrent_dropout=0.2)))
+
+        # model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=16, return_sequences=True, recurrent_dropout=0.2)))
+
+        # # model.add(tf.keras.layers.LSTM(units=64, return_sequences=True, recurrent_dropout=0.2))
+
+        # model.add(tf.keras.layers.LSTM(units=8, recurrent_dropout=0.2))
+
+        # # model.add(tf.keras.layers.Dense(4, kernel_regularizer=tf.keras.regularizers.l1_l2(l1=0.01, l2=0.1), activation='relu'))
+
+        # # Output layer
+        # model.add(tf.keras.layers.Dense(N_DAYS))
+
+        # model.compile(
+        #     optimizer="adam",
+        #     loss="mean_squared_error",
+        #     metrics=["mean_absolute_error"]
+        # )
+        # return model
