@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
 
 SEQUENCE_LENGTH = 30
 BATCH_SIZE = 1
@@ -14,8 +16,9 @@ class NeuralNetwork():
         self.sequenceLength = None
         self.batchSize = None
         self.numFeatures = None
+        self.scalarLabels = None
     
-    def getDataLabels(self):
+    def getDataset(self):
 
         # Reverse data so trains from oldest to newest
         self.data = self.data.iloc[::-1]
@@ -29,36 +32,38 @@ class NeuralNetwork():
 
         # Scale data to help with fitting
         scalarData = MinMaxScaler()
-        scalarLabels = MinMaxScaler()
         data = scalarData.fit_transform(data)
 
         # Reshape labels into 2D array since MinMaxSclar needs 2D array
+        self.scalarLabels = MinMaxScaler()
         labels = labels.reshape(-1, 1)
-        labels = scalarLabels.fit_transform(labels)
+        labels = self.scalarLabels.fit_transform(labels)
         # Reshape labels back into 1D array
         labels = labels.flatten()
 
+        # Initialize/log attributes
         self.numFeatures = data.shape[1]
-
-        # Create overlapping dataset
         self.sequenceLength = SEQUENCE_LENGTH
         self.batchSize = BATCH_SIZE
-        labels = labels[self.sequenceLength:] # Remove first sequenceLength labels since won't need
-        newLabels = []
-        for i in range(len(labels) - N_DAYS + 1):
-            newLabels.append(labels[i : i + N_DAYS])
-        
-        newLabels = np.array(newLabels)
 
-        labels = labels.reshape(-1, 1) # Reshape to 2D labels since data is 3D. Basically just a 2D array where each row just has one label
+        # Create overlapping dataset
+        # Remove first sequenceLength labels since has to be skipped to create overlapping dataset
+        labels = labels[self.sequenceLength:] 
+        windowedLabels = []
+        for i in range(len(labels) - N_DAYS + 1):
+            windowedLabels.append(labels[i : i + N_DAYS])
+        
+        windowedLabels = np.array(windowedLabels)
 
         dataset = tf.keras.utils.timeseries_dataset_from_array(
             data,
-            newLabels,
+            windowedLabels,
             self.sequenceLength,
             batch_size = self.batchSize,
         )
-        return dataset, scalarLabels
+
+        # Return scalarLabels as well to use to inverse transform later
+        return dataset
 
     def logData(self):
         # Check if existing data in trained_data
@@ -95,17 +100,7 @@ class NeuralNetwork():
             #  Save everything to csv
             self.data.to_csv('data/' + self.ticker + '/trained_data.csv', index=False)
 
-    def updateModel(self):
-        # if model exists
-            # load model
-        # if no model already exists
-            # Create new model
 
-        # Feed all new_data into model
-        # Maybe split into test and train? SO maybe make attributes of test and train data?
-
-        # Save model at end
-        pass
     def getModel(self, hp):
         model = tf.keras.Sequential()
 
@@ -160,29 +155,32 @@ class NeuralNetwork():
 
         return model
 
+    def graphResults(self, predictions, labelTest):
+        # Undo scaling on predictions and labels
+        predictions = self.scalarLabels.inverse_transform(predictions)
+        labelTest = self.scalarLabels.inverse_transform(labelTest)
 
-        # model = tf.keras.Sequential()
+        for i in range(len(labelTest)):
+            rmse = np.sqrt(mean_squared_error(labelTest[i], predictions[i]))
+            print("RMSE: ", rmse)
+            # Plotting
+            plt.figure(figsize=(10, 6))
 
-        # model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
-        #     units=32, 
-        #     return_sequences=True, 
-        #     input_shape=(self.sequenceLength, self.numFeatures),
-        #     recurrent_dropout=0.2)))
+            # Plot actual labels
+            plt.plot(labelTest[i], linestyle='-', linewidth = 0.7, color='b', label='Actual', marker='o', markersize=1)
 
-        # model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=16, return_sequences=True, recurrent_dropout=0.2)))
+            # Plot predictions
+            plt.plot(predictions[i], linestyle='--', linewidth = 0.7, color='r', label='Predicted', marker='o', markersize=1)
 
-        # # model.add(tf.keras.layers.LSTM(units=64, return_sequences=True, recurrent_dropout=0.2))
+            # Customize plot
+            plt.title('Actual vs. Predicted')
+            plt.xlabel('Sample')
+            plt.ylabel('Value')
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
+            plt.savefig('data/' + self.ticker + '/graph.png')
 
-        # model.add(tf.keras.layers.LSTM(units=8, recurrent_dropout=0.2))
-
-        # # model.add(tf.keras.layers.Dense(4, kernel_regularizer=tf.keras.regularizers.l1_l2(l1=0.01, l2=0.1), activation='relu'))
-
-        # # Output layer
-        # model.add(tf.keras.layers.Dense(N_DAYS))
-
-        # model.compile(
-        #     optimizer="adam",
-        #     loss="mean_squared_error",
-        #     metrics=["mean_absolute_error"]
-        # )
-        # return model
+            # Show plot
+            plt.show()
+        return
