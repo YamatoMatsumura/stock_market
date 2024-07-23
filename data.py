@@ -3,6 +3,8 @@ import pandas as pd
 import datetime as dt
 import os
 import random
+import keyboard
+
 
 import vpn_script
 
@@ -59,7 +61,7 @@ class StockDataContainer:
     def updateAllData(self):
         print("Updating all data...")
 
-        # self.updateSentimentData()
+        self.updateSentimentData()
         self.updateOHLCData()
         self.updateMeanData()
         self.updateReturnData()
@@ -114,7 +116,7 @@ class StockDataContainer:
         else:
             # Fill in OHLC data
             self.data = pd.concat([self.data, df], axis=0, join='outer')
-     
+
     def updateSentimentData(self):
         # Initialize empty dataframe
         columns = ['Date', 'Sentiment (Avg)', 'Number of Articles']
@@ -124,6 +126,16 @@ class StockDataContainer:
         dayDelta = 0
 
         while True:
+            # Check for pause
+            if keyboard.is_pressed('p'):
+                print('Paused')
+                vpn_script.toggleVPN()
+                while True:
+                    if keyboard.is_pressed('esc'):
+                        print('Resuming')
+                        vpn_script.toggleVPN()
+                        break
+
             # Check halfway through if too many missing data points
             if dayDelta == 365:
                 missingDataCount = (df['Number of Articles'] == 0).sum()
