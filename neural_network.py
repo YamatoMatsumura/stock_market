@@ -4,6 +4,8 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
+from datetime import date
+import os
 
 SEQUENCE_LENGTH = 30
 BATCH_SIZE = 1
@@ -105,43 +107,43 @@ class NeuralNetwork():
         model = tf.keras.Sequential()
 
         # Layer 1
-        hpUnits1 = hp.Choice('units: 1', values=[8,12,16,32,64])
-        hpRecurrentDropouts1 = hp.Float('recurrent dropout: 1', min_value=0.0, max_value=0.5, step=0.1)
+        hpUnits1 = hp.Choice('units: 1', values=[4,8,16,32,64])
+        dropout1 = hp.Choice('Dropout: 1', values=[0.0,0.2])
         model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
             units=hpUnits1,
             return_sequences=True,
             input_shape=(self.sequenceLength, self.numFeatures),
-            recurrent_dropout=hpRecurrentDropouts1
+            recurrent_dropout=dropout1
         )))
 
         # Layer 2
         skipBidirectional = hp.Boolean('Skip optional Bidirectional')
         if not skipBidirectional:
-            hpUnits2 = hp.Choice('units: 2', values=[4,8,12,16,32])
-            hpRecurrentDropouts2 = hp.Float('recurrent dropout: 2', min_value=0.0, max_value=0.5, step=0.1)
+            hpUnits2 = hp.Choice('units: 2', values=[4,8,16,32])
+            dropout2 = hp.Choice('Dropout: 2', values=[0.0, 0.2])
             model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
                 units=hpUnits2,
                 return_sequences=True,
-                recurrent_dropout=hpRecurrentDropouts2
+                recurrent_dropout=dropout2
             )))
 
         # Layer 3
         skipRegular = hp.Boolean('Skip optional regular')
+        dropout3 = hp.Choice('Dropout: 3', values=[0.0, 0.2])
         if not skipRegular:
-            hpUnits4 = hp.Choice('units: 3', values=[2,4,6,8,12,16])
-            hpRecurrentDropouts4 = hp.Float('recurrent dropout: 3', min_value=0.0, max_value=0.5, step=0.1)
+            hpUnits3 = hp.Choice('units: 3', values=[4,8,16,32])
             model.add(tf.keras.layers.LSTM(
-                units=hpUnits4,
+                units=hpUnits3,
                 return_sequences=True,
-                recurrent_dropout=hpRecurrentDropouts4
+                recurrent_dropout=dropout3
             ))
 
         # Layer 4
-        hpUnits3 = hp.Choice('units: 4', values=[2,4,6,8,12,16])
-        hpRecurrentDropouts3 = hp.Float('recurrent dropout: 4', min_value=0.0, max_value=0.5, step=0.1)
+        hpUnits4 = hp.Choice('units: 4', values=[4,8,16,32])
+        dropout4 = hp.Choice('Dropout: 4', values=[0.0, 0.2])
         model.add(tf.keras.layers.LSTM(
-            units=hpUnits3,
-            recurrent_dropout=hpRecurrentDropouts3
+            units=hpUnits4,
+            recurrent_dropout=dropout4
         ))
 
         # Output Layer
@@ -155,7 +157,7 @@ class NeuralNetwork():
 
         return model
 
-    def graphResults(self, predictions, labelTest):
+    def graphResults(self, predictions, labelTest, testSize, model):
         # Undo scaling on predictions and labels
         predictions = self.scalarLabels.inverse_transform(predictions)
         labelTest = self.scalarLabels.inverse_transform(labelTest)
@@ -179,7 +181,55 @@ class NeuralNetwork():
             plt.legend()
             plt.grid(True)
             plt.tight_layout()
-            plt.savefig('data/' + self.ticker + '/graph.png')
+
+            # Initialize metadata
+            metadata = {
+                'Date: ': str(date.today().strftime('%m/%d/%Y')),
+                'Testing Size: ': str(testSize)
+            }
+
+            # Count number of graphs already existing to not overwrite previous ones
+            fileCount = 1
+            for root, dirs, files in os.walk(f'data/{self.ticker}'):
+                for file in files:
+                    if file.endswith('.png'):
+                        fileCount += 1
+            
+            # Save plot
+            plt.savefig(f'data/{self.ticker}/graph{fileCount}notes.png')
+
+            # Write metadata to seperate file
+            with open(f'data/{self.ticker}/graph{fileCount}.txt', 'w') as file:
+                for key, value in metadata.items():
+                    file.write(f'{key}: {value} \n')
+                
+                file.write('\n' + '-'*40)
+                file.write('Model Summary')
+                file.write('-'*40 + '\n')
+                
+                # Iterate through the layers and write to file the specific attributes
+                for layer in model.layers:
+                    # Check if the layer is Bidirectional
+                    if isinstance(layer, tf.keras.layers.Bidirectional):
+                        # Extract the wrapped LSTM layer
+                        lstm_layer = layer._layers[0]
+                        
+                        if isinstance(lstm_layer, tf.keras.layers.LSTM):
+                            file.write('Bidirectional LSTM Layer\n')
+                            file.write(f'Units: {lstm_layer.units}\n')
+                            file.write(f'Recurrent Dropout: {lstm_layer.recurrent_dropout}\n')
+                            file.write('-' * 40 + '\n')
+                    # Check if the layer is an LSTM layer
+                    elif isinstance(layer, tf.keras.layers.LSTM):
+                        file.write('LSTM Layer\n')
+                        file.write(f'Units: {layer.units}\n')
+                        file.write(f'Recurrent Dropout: {layer.recurrent_dropout}\n')
+                        file.write('-' * 40 + '\n')
+                    # Check if the layer is a Dense layer
+                    elif isinstance(layer, tf.keras.layers.Dense):
+                        file.write(f'Output Layer\n')
+                        file.write(f'Units: {layer.units}\n')
+                        file.write('-' * 40 + '\n')
 
             # Show plot
             plt.show()
