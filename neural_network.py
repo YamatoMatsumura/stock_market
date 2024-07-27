@@ -1,11 +1,8 @@
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.metrics import mean_squared_error
-import matplotlib.pyplot as plt
-from datetime import date
-import os
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
 
 SEQUENCE_LENGTH = 30
 BATCH_SIZE = 1
@@ -19,6 +16,8 @@ class NeuralNetwork():
         self.batchSize = None
         self.numFeatures = None
         self.scalarLabels = None
+        self.model = None
+        self.nDays = N_DAYS
     
     def getDataset(self):
 
@@ -36,7 +35,7 @@ class NeuralNetwork():
         scalarData = MinMaxScaler()
         data = scalarData.fit_transform(data)
 
-        # Reshape labels into 2D array since MinMaxSclar needs 2D array
+        # Reshape labels into 2D array since StandardScalar needs 2D array
         self.scalarLabels = MinMaxScaler()
         labels = labels.reshape(-1, 1)
         labels = self.scalarLabels.fit_transform(labels)
@@ -156,81 +155,3 @@ class NeuralNetwork():
         )
 
         return model
-
-    def graphResults(self, predictions, labelTest, testSize, model):
-        # Undo scaling on predictions and labels
-        predictions = self.scalarLabels.inverse_transform(predictions)
-        labelTest = self.scalarLabels.inverse_transform(labelTest)
-
-        for i in range(len(labelTest)):
-            rmse = np.sqrt(mean_squared_error(labelTest[i], predictions[i]))
-            print("RMSE: ", rmse)
-            # Plotting
-            plt.figure(figsize=(10, 6))
-
-            # Plot actual labels
-            plt.plot(labelTest[i], linestyle='-', linewidth = 0.7, color='b', label='Actual', marker='o', markersize=1)
-
-            # Plot predictions
-            plt.plot(predictions[i], linestyle='--', linewidth = 0.7, color='r', label='Predicted', marker='o', markersize=1)
-
-            # Customize plot
-            plt.title('Actual vs. Predicted')
-            plt.xlabel('Sample')
-            plt.ylabel('Value')
-            plt.legend()
-            plt.grid(True)
-            plt.tight_layout()
-
-            # Initialize metadata
-            metadata = {
-                'Date: ': str(date.today().strftime('%m/%d/%Y')),
-                'Testing Size: ': str(testSize)
-            }
-
-            # Count number of graphs already existing to not overwrite previous ones
-            fileCount = 1
-            for root, dirs, files in os.walk(f'data/{self.ticker}'):
-                for file in files:
-                    if file.endswith('.png'):
-                        fileCount += 1
-            
-            # Save plot
-            plt.savefig(f'data/{self.ticker}/graph{fileCount}notes.png')
-
-            # Write metadata to seperate file
-            with open(f'data/{self.ticker}/graph{fileCount}.txt', 'w') as file:
-                for key, value in metadata.items():
-                    file.write(f'{key}: {value} \n')
-                
-                file.write('\n' + '-'*40)
-                file.write('Model Summary')
-                file.write('-'*40 + '\n')
-                
-                # Iterate through the layers and write to file the specific attributes
-                for layer in model.layers:
-                    # Check if the layer is Bidirectional
-                    if isinstance(layer, tf.keras.layers.Bidirectional):
-                        # Extract the wrapped LSTM layer
-                        lstm_layer = layer._layers[0]
-                        
-                        if isinstance(lstm_layer, tf.keras.layers.LSTM):
-                            file.write('Bidirectional LSTM Layer\n')
-                            file.write(f'Units: {lstm_layer.units}\n')
-                            file.write(f'Recurrent Dropout: {lstm_layer.recurrent_dropout}\n')
-                            file.write('-' * 40 + '\n')
-                    # Check if the layer is an LSTM layer
-                    elif isinstance(layer, tf.keras.layers.LSTM):
-                        file.write('LSTM Layer\n')
-                        file.write(f'Units: {layer.units}\n')
-                        file.write(f'Recurrent Dropout: {layer.recurrent_dropout}\n')
-                        file.write('-' * 40 + '\n')
-                    # Check if the layer is a Dense layer
-                    elif isinstance(layer, tf.keras.layers.Dense):
-                        file.write(f'Output Layer\n')
-                        file.write(f'Units: {layer.units}\n')
-                        file.write('-' * 40 + '\n')
-
-            # Show plot
-            plt.show()
-        return

@@ -1,25 +1,25 @@
 from data import StockDataContainer
 from neural_network import NeuralNetwork
+from result_saver import saveResults
+
 import numpy as np
 import tensorflow as tf
 import keras_tuner as kt
-from sklearn.model_selection import train_test_split
 
-x = ['GOOG', 'NVDA', 'COIN']
-STOCK_NAMES = ['AAPL']
-STOCK_NAME = 'BNED'
+
+x = ['BNED', 'GOOG', 'NVDA', 'COIN']
+STOCK_NAMES = ['SPOT']
 EPOCHS = 150
 TESTING_SIZE = 1
-EARLY_STOP_PATIENCE = 15
+EARLY_STOP_PATIENCE = 20
 BATCH_SIZE = 1
 UPDATE_DATA = False
 CREATE_NEW_MODEL = False
 
 def main():
     for stock in STOCK_NAMES:
-        STOCK_NAME = stock
         # Initialize stock data container
-        stockData = StockDataContainer(STOCK_NAME)
+        stockData = StockDataContainer(stock)
         if UPDATE_DATA:
             stockData.updateAllData()
 
@@ -74,21 +74,26 @@ def main():
             # Create model based on best hps
             bestHps = tuner.get_best_hyperparameters(num_trials=1)[0]
             model = tuner.hypermodel.build(bestHps)
-            model.fit(trainingDataSet, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(testingDataSet), callbacks=[earlyStopping])
+            history = model.fit(trainingDataSet, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(testingDataSet), callbacks=[earlyStopping])
 
-            # Save model
-            model.save(f'data/{stockPredictor.ticker}/model.keras')
+            # Keep track of model for result saving
+            stockPredictor.model = model
+
         else:
             # Load model
-            model = tf.keras.models.load_model('data/' + stockPredictor.ticker + '/model.keras')
+            version = input("Select version to load (0 for old): ")
+            if version == 0:
+                model = tf.keras.models.load_model(f'data/{stockPredictor.ticker}/model.keras')
+            model = tf.keras.models.load_model(f'data/{stockPredictor.ticker}/{str(version)}/model.keras')
 
             # Train model on new data
             # ****************************************************************
             # Make sure dataTrain and labelTrain only contain new data and not all the data so it doesn't model.fit on all the data again
             #*****************************************************************
-            # model.fit(trainingDataSet, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(testingDataSet), callbacks=[earlyStopping])
-            # # Save model
-            # model.save(f'data/{stockPredictor.ticker}/model.keras')
+            history = model.fit(trainingDataSet, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(testingDataSet), callbacks=[earlyStopping])
+
+            # Keep track of model for result saving
+            stockPredictor.model = model
         
         # Reduce data dimensions from 4D to 3D since indexing it made it 4D
         dataTestList = dataTestList.reshape(-1, dataTestList.shape[2], dataTestList.shape[3])
@@ -98,8 +103,16 @@ def main():
         # Make predictions
         predictions = model.predict(dataTestList)
 
-        # Compare predictions vs actual values to determine accuracy
-        stockPredictor.graphResults(predictions, labelTestList, TESTING_SIZE, model)
+        # Get best val loss from training history
+        valLoss = history.history['val_loss']
+        bestValLoss = min(valLoss)
+
+        # Prepare metadata
+        metadata = [TESTING_SIZE, bestValLoss]
+
+        # Save results from training session
+        saveResults(metadata, stockPredictor, predictions, labelTestList)
+
 
 if __name__ == '__main__':
     main()
