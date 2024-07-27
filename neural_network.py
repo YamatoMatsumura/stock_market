@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 
 
-SEQUENCE_LENGTH = 30
+SEQUENCE_LENGTH = 15
 BATCH_SIZE = 1
-N_DAYS = 30
+N_DAYS = 15
+
 
 class NeuralNetwork():
     def __init__(self, container):

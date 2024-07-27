@@ -5,14 +5,15 @@ import os
 import random
 import keyboard
 
-
 import vpn_script
+
 
 RUN_SCRIPT = True
 WINDOW_SIZE = 30
 ANALYTICS_RANGE = '3year'
 TECHNICAL_INDICATOR_WINDOW = 30
 SENTIMENT_MISSING_PERCENT = 0.2
+
 
 class StockDataContainer:
     def __init__(self, ticker):

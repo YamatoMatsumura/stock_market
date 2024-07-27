@@ -7,14 +7,14 @@ import tensorflow as tf
 import keras_tuner as kt
 
 
-x = ['BNED', 'GOOG', 'NVDA', 'COIN']
-STOCK_NAMES = ['SPOT']
+STOCK_NAMES = ['AAPL', 'AMZN', 'BNED', 'META', 'MSFT', 'SPOT', 'COIN', 'GOOG', 'NVDA']
 EPOCHS = 150
 TESTING_SIZE = 1
 EARLY_STOP_PATIENCE = 20
 BATCH_SIZE = 1
 UPDATE_DATA = False
-CREATE_NEW_MODEL = False
+CREATE_NEW_MODEL = True
+
 
 def main():
     for stock in STOCK_NAMES:
@@ -57,7 +57,7 @@ def main():
             tuner = kt.Hyperband(
                 stockPredictor.getModel,
                 objective='val_loss',
-                max_epochs=50,
+                max_epochs=60,
                 factor=3,
                 directory=f"data/{stockPredictor.ticker}",
                 project_name=f"Hyperparam Tuning",
