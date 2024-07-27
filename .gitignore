@@ -1,3 +1,6 @@
+# API vpn refresh
+vpn_script.py
+
 # Data files
 /data
 *.json
@@ -7,7 +10,7 @@ plan.txt
 TODO.txt
 
 # API key
-api_key.txt
+api_keys/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
