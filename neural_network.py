@@ -4,9 +4,9 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 
 
-SEQUENCE_LENGTH = 15
+SEQUENCE_LENGTH = 30
 BATCH_SIZE = 1
-N_DAYS = 15
+N_DAYS = 30
 
 
 class NeuralNetwork():
@@ -49,7 +49,7 @@ class NeuralNetwork():
         self.batchSize = BATCH_SIZE
 
         # Create overlapping dataset
-        # Remove first sequenceLength labels since has to be skipped to create overlapping dataset
+        # Remove first sequenceLength labels since predicting future closing price (i.e. day 1 of data has day N_DAYS+1 closing price)
         labels = labels[self.sequenceLength:] 
         windowedLabels = []
         for i in range(len(labels) - N_DAYS + 1):
@@ -64,7 +64,7 @@ class NeuralNetwork():
             batch_size = self.batchSize,
         )
 
-        # Return scalarLabels as well to use to inverse transform later
+
         return dataset
 
     def logData(self):

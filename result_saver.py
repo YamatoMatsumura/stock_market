@@ -6,7 +6,7 @@ from datetime import date
 import tensorflow as tf
 
 
-def saveResults(metadata, neuralNetwork, predictions, labelTest):
+def createNewDir(neuralNetwork):
     ticker = neuralNetwork.ticker
 
     # Count number of graphs already existing to not overwrite previous ones
@@ -22,7 +22,9 @@ def saveResults(metadata, neuralNetwork, predictions, labelTest):
     # Create directory to house this training session's data
     os.makedirs(f'data/{ticker}/{dirCount}')
 
-    dirPath = f'data/{ticker}/{dirCount}'
+    return f'data/{ticker}/{dirCount}'
+
+def saveResults(metadata, neuralNetwork, predictions, labelTest, dirPath):
 
     # Graph results
     graphResults(dirPath, neuralNetwork, predictions, labelTest)
@@ -66,13 +68,11 @@ def graphResults(dirPath, neuralNetwork, predictions, labelTest):
 
 def saveMetadata(metadata, dirpath, neuralNetwork):
     model = neuralNetwork.model
-    testSize = metadata[0]
-    bestValLoss = metadata[1]
+    bestValLoss = metadata[0]
 
     # Initialize metadata
     metadata = {
         'Date: ': str(date.today().strftime('%m/%d/%Y')),
-        'Testing Size: ': str(testSize),
         'Best Val Loss: ': str(bestValLoss),
         'Sequence Length: ': neuralNetwork.sequenceLength,
         'Predicting N Days: ': neuralNetwork.nDays
