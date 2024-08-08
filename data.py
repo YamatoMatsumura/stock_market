@@ -207,50 +207,6 @@ class StockDataContainer:
         # Make sure Date is formatted correctly
         self.data['Date'] = self.data['Date'].dt.strftime('%Y-%m-%d')
     
-    def updateMeanData(self):
-        self._updateAnalyticsData('MEAN', 'Mean')
-    
-    def updateMedianData(self):
-        self._updateAnalyticsData('MEDIAN', 'Median')
-
-    def updateReturnData(self):
-        self._updateAnalyticsData('CUMULATIVE_RETURN', 'Cumulative Return')
-    
-    def updateVarianceData(self):
-        self._updateAnalyticsData('VARIANCE', 'Variance')
-    
-    def updateSTDDevData(self):
-        self._updateAnalyticsData('STDDEV', 'STDDEV')
-    
-    def updateSMAData(self):
-        self._updateTechnicalIndicatorData('SMA')
-    
-    def updateEMAData(self):
-        self._updateTechnicalIndicatorData('EMA')
-    
-    def updateSTOCHData(self):
-        self._updateTechnicalIndicatorData('STOCH')
-    
-    def updateRSIData(self):
-        self._updateTechnicalIndicatorData('RSI')
-    
-    def updateADXData(self):
-        self._updateTechnicalIndicatorData('ADX')
-
-    def updateCCIData(self):
-        self._updateTechnicalIndicatorData('CCI')
-    
-    def updateAROONData(self):
-        self._updateTechnicalIndicatorData('AROON')
-    
-    def updateBBANDSData(self):
-        self._updateTechnicalIndicatorData('BBANDS')
-    
-    def updateADData(self):
-        self._updateTechnicalIndicatorData('AD', 'Chaikin A/D')
-    
-    def updateOBVData(self):
-        self._updateTechnicalIndicatorData('OBV')
 
     def _updateTechnicalIndicatorData(self, category, customCategory=False):
         # Make API Call
@@ -283,6 +239,36 @@ class StockDataContainer:
         else:
             # Fill in sentiment data
             self.data = pd.concat([self.data, df], axis=0, join='outer')
+
+    def updateSMAData(self):
+        self._updateTechnicalIndicatorData('SMA')
+    
+    def updateEMAData(self):
+        self._updateTechnicalIndicatorData('EMA')
+    
+    def updateSTOCHData(self):
+        self._updateTechnicalIndicatorData('STOCH')
+    
+    def updateRSIData(self):
+        self._updateTechnicalIndicatorData('RSI')
+    
+    def updateADXData(self):
+        self._updateTechnicalIndicatorData('ADX')
+
+    def updateCCIData(self):
+        self._updateTechnicalIndicatorData('CCI')
+    
+    def updateAROONData(self):
+        self._updateTechnicalIndicatorData('AROON')
+    
+    def updateBBANDSData(self):
+        self._updateTechnicalIndicatorData('BBANDS')
+    
+    def updateADData(self):
+        self._updateTechnicalIndicatorData('AD', 'Chaikin A/D')
+    
+    def updateOBVData(self):
+        self._updateTechnicalIndicatorData('OBV')
 
     
     def _updateAnalyticsData(self, category, categoryName, annualized=False):
@@ -323,6 +309,21 @@ class StockDataContainer:
         else:
             # Fill in sentiment data
             self.data = pd.concat([self.data, df], axis=0, join='outer')
+
+    def updateMeanData(self):
+        self._updateAnalyticsData('MEAN', 'Mean')
+    
+    def updateMedianData(self):
+        self._updateAnalyticsData('MEDIAN', 'Median')
+
+    def updateReturnData(self):
+        self._updateAnalyticsData('CUMULATIVE_RETURN', 'Cumulative Return')
+    
+    def updateVarianceData(self):
+        self._updateAnalyticsData('VARIANCE', 'Variance')
+    
+    def updateSTDDevData(self):
+        self._updateAnalyticsData('STDDEV', 'STDDEV')
 
 
     def _parseOHLC(self, rawData):
