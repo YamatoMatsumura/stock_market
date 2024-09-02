@@ -2,24 +2,24 @@ import data
 from data import StockDataContainer
 from neural_network import NeuralNetwork
 import result_saver as saver
+import matplotlib.pyplot as plt
 
 import numpy as np
 import tensorflow as tf
 import keras_tuner as kt
-import matplotlib.pyplot as plt
-from sklearn.metrics import mean_squared_error
 
 
-STOCK_NAMES = ['NVDA']
-EPOCHS = 150
+STOCK_NAMES = ['BNED', 'COIN', 'GOOG', 'META', 'MSFT', 'NVDA', 'SPOT']
+EPOCHS = 70
 EARLY_STOP_PATIENCE = 30
-BATCH_SIZE = 1
+BATCH_SIZE = 3
 
 UPDATE_DATA = False
 
 CREATE_NEW_MODEL = False  # Does Hyperparm tuning & model.fit
 TESTING = False  # Loads previous hyperparm tuning session
-LOADING_MODEL = True # Loads previous model
+LOADING_MODEL = False # Loads previous model
+TESTING_NEW_MODEL = True  # Creates model in nn.getManualModel(). No Hyperparm tuning
 
 
 def main():
@@ -34,6 +34,7 @@ def main():
 
         # Log trained data to avoid retraining from fresh every time
         stockPredictor.logData()
+
 
         # Get dataset
         dataset = stockPredictor.getDataset()
@@ -138,6 +139,28 @@ def main():
             # Keep track of model for result saving
             stockPredictor.model = model
         
+        elif TESTING_NEW_MODEL:
+            model = stockPredictor.getManualModel()
+
+            history = model.fit(trainingDataset, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(testingDataset))
+
+            # Extract the loss values
+            train_loss = history.history['loss']
+            val_loss = history.history['val_loss']
+
+            # Plot the learning curves
+            plt.figure(figsize=(10, 6))
+            plt.plot(train_loss, label='Training Loss')
+            plt.plot(val_loss, label='Validation Loss')
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.title('Learning Curves')
+            plt.legend()
+            plt.savefig(f'{dirPath}/loss.png')
+            # plt.show()
+
+            stockPredictor.model = model
+        
 
         # Reduce data dimensions from 4D to 3D since indexing dataset made list versions 4D
         testingData = testingData.reshape(-1, testingData.shape[2], testingData.shape[3])
@@ -156,7 +179,7 @@ def main():
         predictions = model.predict(testingData)
 
         # Get best val loss from training history
-        valLoss = history.history['val_loss']
+        valLoss = history.history['loss']
         bestValLoss = min(valLoss)
 
         # Prepare metadata
