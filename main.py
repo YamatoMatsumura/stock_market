@@ -9,17 +9,17 @@ import tensorflow as tf
 import keras_tuner as kt
 
 
-STOCK_NAMES = ['BNED', 'COIN', 'GOOG', 'META', 'MSFT', 'NVDA', 'SPOT']
-EPOCHS = 70
-EARLY_STOP_PATIENCE = 30
-BATCH_SIZE = 3
+STOCK_NAMES = ['SPOT']  # List of stock names to look at
+EPOCHS = 70  # Epochs to train model for
+EARLY_STOP_PATIENCE = 30  # Stops model training if reaches x amount of epochs without improvement
+BATCH_SIZE = 1  # Batch size for data set
 
-UPDATE_DATA = False
+UPDATE_DATA = False  # Updates training data to pull newest data
 
 CREATE_NEW_MODEL = False  # Does Hyperparm tuning & model.fit
 TESTING = False  # Loads previous hyperparm tuning session
-LOADING_MODEL = False # Loads previous model
-TESTING_NEW_MODEL = True  # Creates model in nn.getManualModel(). No Hyperparm tuning
+LOADING_MODEL = True # Loads previous model
+TESTING_NEW_MODEL = False  # Creates model in nn.getManualModel(). No Hyperparm tuning
 
 
 def main():
@@ -177,6 +177,11 @@ def main():
 
         # Make predictions
         predictions = model.predict(testingData)
+
+        testingLabels = np.array(testingLabels)
+        predictions = np.array(predictions)
+        print(np.mean((testingLabels - predictions) ** 2))
+        input()
 
         # Get best val loss from training history
         valLoss = history.history['loss']

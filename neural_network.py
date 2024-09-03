@@ -4,9 +4,9 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 
 
-SEQUENCE_LENGTH = 30
-BATCH_SIZE = 1
-N_DAYS = 30
+SEQUENCE_LENGTH = 60  # Sequence length for data set
+BATCH_SIZE = 1  # Batch size for data set
+N_DAYS = 30  # Controls how many days into the future to predict
 
 
 class NeuralNetwork():
@@ -147,6 +147,21 @@ class NeuralNetwork():
         ))
 
         # Output Layer
+        model.add(tf.keras.layers.Dense(N_DAYS))
+
+        model.compile(
+            optimizer="adam",
+            loss="mean_squared_error",
+            metrics=["mean_absolute_error"]
+        )
+
+        return model
+
+    def getManualModel(self):
+        model = tf.keras.Sequential()
+
+        model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=16, return_sequences=True, recurrent_dropout=0.2)))
+        model.add(tf.keras.layers.LSTM(units=8, recurrent_dropout=0.2))
         model.add(tf.keras.layers.Dense(N_DAYS))
 
         model.compile(

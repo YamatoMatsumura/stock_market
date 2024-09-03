@@ -8,11 +8,10 @@ import keyboard
 import vpn_script
 
 
-RUN_SCRIPT = True
-WINDOW_SIZE = 5
-ANALYTICS_RANGE = '3year'
-TECHNICAL_INDICATOR_WINDOW = 5
-SENTIMENT_MISSING_PERCENT = 0.2
+RUN_SCRIPT = True  # Controls whether to run VPN refresh script or not
+WINDOW_SIZE = 5  # Window size for data set
+ANALYTICS_RANGE = '3year'  # Cutoff range for data
+SENTIMENT_MISSING_PERCENT = 0.2  # Cutoff percent to ignore sentiment data from data set
 
 
 class StockDataContainer:
@@ -214,7 +213,7 @@ class StockDataContainer:
                'function=' + category +
                '&symbol=' + self.ticker +
                '&interval=daily' + 
-               '&time_period=' + str(TECHNICAL_INDICATOR_WINDOW) + 
+               '&time_period=' + str(WINDOW_SIZE) + 
                '&series_type=close' + 
                '&apikey=' + self.apiKey_AV) 
         r = requests.get(url) 
