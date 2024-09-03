@@ -21,11 +21,11 @@ data
 |   |       notes about model
 ```
 
-Ticker Name: Name of Stock (ex. AAPL)
-Trial #: As different models are tested, each is organized under the Stock it was run under
-Output Graph: This is the graph that graphs predictions vs actual stock closing prices to help visualize results
-Output Model: This is the LSTM model in case it needs to be updated/used again later
-Notes.txt: This contains notes about the model. For example, currently set to show date, val loss, sequence length, n days, along with basic model layer summary
+Ticker Name: Name of Stock (ex. AAPL)  
+Trial #: As different models are tested, each is organized under the Stock it was run under  
+Output Graph: This is the graph that graphs predictions vs actual stock closing prices to help visualize results  
+Output Model: This is the LSTM model in case it needs to be updated/used again later  
+Notes.txt: This contains notes about the model. For example, currently set to show date, val loss, sequence length, n days, along with basic model layer summary  
 
 For better understanding, here is what an actual one may look like
 ```
