@@ -4,7 +4,7 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 
 
-SEQUENCE_LENGTH = 60  # Sequence length for data set
+SEQUENCE_LENGTH = 30  # Sequence length for data set
 BATCH_SIZE = 1  # Batch size for data set
 N_DAYS = 30  # Controls how many days into the future to predict
 
@@ -107,7 +107,7 @@ class NeuralNetwork():
         model = tf.keras.Sequential()
 
         # Layer 1
-        hpUnits1 = hp.Choice('units: 1', values=[4,8,16,32,64])
+        hpUnits1 = hp.Choice('units: 1', values=[4,8,16])
         dropout1 = hp.Choice('Dropout: 1', values=[0.0,0.2])
         model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
             units=hpUnits1,
@@ -119,7 +119,7 @@ class NeuralNetwork():
         # Layer 2
         skipBidirectional = hp.Boolean('Skip optional Bidirectional')
         if not skipBidirectional:
-            hpUnits2 = hp.Choice('units: 2', values=[4,8,16,32])
+            hpUnits2 = hp.Choice('units: 2', values=[4,8,16])
             dropout2 = hp.Choice('Dropout: 2', values=[0.0, 0.2])
             model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(
                 units=hpUnits2,
@@ -129,9 +129,9 @@ class NeuralNetwork():
 
         # Layer 3
         skipRegular = hp.Boolean('Skip optional regular')
+        hpUnits3 = hp.Choice('units: 3', values=[4,8])
         dropout3 = hp.Choice('Dropout: 3', values=[0.0, 0.2])
         if not skipRegular:
-            hpUnits3 = hp.Choice('units: 3', values=[4,8,16,32])
             model.add(tf.keras.layers.LSTM(
                 units=hpUnits3,
                 return_sequences=True,
@@ -139,7 +139,7 @@ class NeuralNetwork():
             ))
 
         # Layer 4
-        hpUnits4 = hp.Choice('units: 4', values=[4,8,16,32])
+        hpUnits4 = hp.Choice('units: 4', values=[4,8])
         dropout4 = hp.Choice('Dropout: 4', values=[0.0, 0.2])
         model.add(tf.keras.layers.LSTM(
             units=hpUnits4,
