@@ -9,8 +9,9 @@ import vpn_script
 
 
 RUN_SCRIPT = True  # Controls whether to run VPN refresh script or not
-WINDOW_SIZE = 5  # Window size for data set
+ANALYTICS_WINDOW_SIZE = 10  # Window size for analytics portion (mean, median, etc.) Minimum of 10 days
 ANALYTICS_RANGE = '3year'  # Cutoff range for data
+TECHNICAL_WINDOW_SIZE = 5  # Window size for technical portion (SMA, EMA, Variance, etc.)
 SENTIMENT_MISSING_PERCENT = 0.2  # Cutoff percent to ignore sentiment data from data set
 
 
@@ -78,7 +79,7 @@ class StockDataContainer:
         self.updateBBANDSData()
         self.updateADData()
         self.updateOBVData()
-        # self.updateDateData()
+        self.updateDateData()
 
         # Turn off vpn once done fetching data
         vpn_script.closeVpn(RUN_SCRIPT)
@@ -213,7 +214,7 @@ class StockDataContainer:
                'function=' + category +
                '&symbol=' + self.ticker +
                '&interval=daily' + 
-               '&time_period=' + str(WINDOW_SIZE) + 
+               '&time_period=' + str(TECHNICAL_WINDOW_SIZE) + 
                '&series_type=close' + 
                '&apikey=' + self.apiKey_AV) 
         r = requests.get(url) 
@@ -278,7 +279,7 @@ class StockDataContainer:
                '&RANGE=' + ANALYTICS_RANGE +
                '&INTERVAL=DAILY' + 
                '&OHLC=close'
-               '&WINDOW_SIZE=' + str(WINDOW_SIZE) + 
+               '&WINDOW_SIZE=' + str(ANALYTICS_WINDOW_SIZE) + 
                '&CALCULATIONS=' + category +
                '&apikey=' + self.apiKey_AV)
         r = requests.get(url)
@@ -298,9 +299,11 @@ class StockDataContainer:
         data = data['payload']['RETURNS_CALCULATIONS'][category]['RUNNING_' + adjustedName][self.ticker]
         data = data.items()
 
+
         # Convert to pandas df
         df = pd.DataFrame(data, columns=['Date', categoryName])
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
+
         
         # Check if no data is currently stored
         if self.data is None or self.data.empty:
@@ -379,6 +382,7 @@ class StockDataContainer:
             for key in data:
                 if maxAPICallError in data[key]:
                     return True
+        
         return False
     
     def _fixMaxAPICallFail(self, data, url):
@@ -398,13 +402,12 @@ class StockDataContainer:
             r = requests.get(url)
             data = r.json()
             attemps += 1
-
             # If just need a new api key
             if 'error' in data.keys():
                 self._getNewAVAPIKey()
                 url = self._getNewAVURL(url)
                 continue
-
+            
             # Refresh vpn again if tried to reconnect multiple times and not working
             if attemps == 3:
                 vpn_script.vpnRefreshScript(self.scriptFirstTimeCalled, RUN_SCRIPT)
